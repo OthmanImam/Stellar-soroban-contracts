@@ -5,6 +5,10 @@ use soroban_sdk::{contract, contractimpl, contracterror, Address, Env, Symbol, s
 mod policy_contract {
     soroban_sdk::contractimport!(file = "../../target/wasm32-unknown-unknown/release/policy_contract.wasm");
 }
+use soroban_sdk::{contract, contractimpl, contracterror, Address, Env, Symbol, IntoVal};
+
+// Import shared types from the common library
+use insurance_contracts::types::ClaimStatus;
 
 #[contract]
 pub struct ClaimsContract;
@@ -107,6 +111,7 @@ impl ClaimsContract {
         env.storage()
             .persistent()
             .set(&(POLICY_CLAIM, policy_id), &claim_id);
+            .set(&(CLAIM, claim_id), &(policy_id, claimant.clone(), amount, ClaimStatus::Submitted, current_time));
 
         env.events().publish(
             (symbol_short!("clm_sub"), claim_id),
@@ -116,13 +121,13 @@ impl ClaimsContract {
         Ok(claim_id)
     }
 
-    pub fn get_claim(env: Env, claim_id: u64) -> Result<(u64, Address, i128, u32, u64), ContractError> {
-        let claim: (u64, Address, i128, u32, u64) = env
+    pub fn get_claim(env: Env, claim_id: u64) -> Result<(u64, Address, i128, ClaimStatus, u64), ContractError> {
+        let claim: (u64, Address, i128, ClaimStatus, u64) = env
             .storage()
             .persistent()
             .get(&(CLAIM, claim_id))
             .ok_or(ContractError::NotFound)?;
-        
+
         Ok(claim)
     }
 
@@ -135,17 +140,18 @@ impl ClaimsContract {
 
         admin.require_auth();
 
-        let mut claim: (u64, Address, i128, u32, u64) = env
+        let mut claim: (u64, Address, i128, ClaimStatus, u64) = env
             .storage()
             .persistent()
             .get(&(CLAIM, claim_id))
             .ok_or(ContractError::NotFound)?;
 
-        if claim.3 != 0u32 && claim.3 != 1u32 {
+        // Can only approve claims that are UnderReview
+        if claim.3 != ClaimStatus::UnderReview {
             return Err(ContractError::InvalidState);
         }
 
-        claim.3 = 2u32;
+        claim.3 = ClaimStatus::Approved;
 
         env.storage()
             .persistent()
@@ -153,6 +159,132 @@ impl ClaimsContract {
 
         env.events().publish(
             (symbol_short!("clm_app"), claim_id),
+            (claim.1, claim.2),
+        );
+
+        Ok(())
+    }
+
+    pub fn start_review(env: Env, claim_id: u64) -> Result<(), ContractError> {
+        let admin: Address = env
+            .storage()
+            .persistent()
+            .get(&ADMIN)
+            .ok_or(ContractError::NotInitialized)?;
+
+        let caller = env.current_contract_address();
+        if caller != admin {
+            return Err(ContractError::Unauthorized);
+        }
+
+        let mut claim: (u64, Address, i128, ClaimStatus, u64) = env
+            .storage()
+            .persistent()
+            .get(&(CLAIM, claim_id))
+            .ok_or(ContractError::NotFound)?;
+
+        // Can only start review for submitted claims
+        if claim.3 != ClaimStatus::Submitted {
+            return Err(ContractError::InvalidState);
+        }
+
+        claim.3 = ClaimStatus::UnderReview;
+
+        env.storage()
+            .persistent()
+            .set(&(CLAIM, claim_id), &claim);
+
+        env.events().publish(
+            (Symbol::new(&env, "claim_under_review"), claim_id),
+            (claim.1, claim.2),
+        );
+
+        Ok(())
+    }
+
+    pub fn reject_claim(env: Env, claim_id: u64) -> Result<(), ContractError> {
+        let admin: Address = env
+            .storage()
+            .persistent()
+            .get(&ADMIN)
+            .ok_or(ContractError::NotInitialized)?;
+
+        let caller = env.current_contract_address();
+        if caller != admin {
+            return Err(ContractError::Unauthorized);
+        }
+
+        let mut claim: (u64, Address, i128, ClaimStatus, u64) = env
+            .storage()
+            .persistent()
+            .get(&(CLAIM, claim_id))
+            .ok_or(ContractError::NotFound)?;
+
+        // Can only reject claims that are UnderReview
+        if claim.3 != ClaimStatus::UnderReview {
+            return Err(ContractError::InvalidState);
+        }
+
+        claim.3 = ClaimStatus::Rejected;
+
+        env.storage()
+            .persistent()
+            .set(&(CLAIM, claim_id), &claim);
+
+        env.events().publish(
+            (Symbol::new(&env, "claim_rejected"), claim_id),
+            (claim.1, claim.2),
+        );
+
+        Ok(())
+    }
+
+    pub fn settle_claim(env: Env, claim_id: u64) -> Result<(), ContractError> {
+        let admin: Address = env
+            .storage()
+            .persistent()
+            .get(&ADMIN)
+            .ok_or(ContractError::NotInitialized)?;
+
+        let caller = env.current_contract_address();
+        if caller != admin {
+            return Err(ContractError::Unauthorized);
+        }
+
+        let mut claim: (u64, Address, i128, ClaimStatus, u64) = env
+            .storage()
+            .persistent()
+            .get(&(CLAIM, claim_id))
+            .ok_or(ContractError::NotFound)?;
+
+        // Can only settle claims that are Approved
+        if claim.3 != ClaimStatus::Approved {
+            return Err(ContractError::InvalidState);
+        }
+
+        // Get risk pool contract address from config
+        let config: (Address, Address) = env
+            .storage()
+            .persistent()
+            .get(&CONFIG)
+            .ok_or(ContractError::NotInitialized)?;
+        let risk_pool_contract = config.1.clone();
+
+        // Call risk pool to payout the claim amount
+        env.invoke_contract::<()>(
+            &risk_pool_contract,
+            &Symbol::new(&env, "payout_claim"),
+            (claim.1.clone(), claim.2).into_val(&env),
+        );
+
+        claim.3 = ClaimStatus::Settled;
+
+        env.storage()
+            .persistent()
+            .set(&(CLAIM, claim_id), &claim);
+
+        env.events().publish(
+            (Symbol::new(&env, "claim_settled"), claim_id),
             (claim.1, claim.2),
         );
 
