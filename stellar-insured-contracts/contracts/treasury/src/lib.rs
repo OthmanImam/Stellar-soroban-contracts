@@ -313,8 +313,8 @@ impl TreasuryContract {
         env.storage().persistent().set(&TOTAL_FEES_COLLECTED, &new_total);
 
         env.events().publish(
-            (Symbol::new(&env, "premium_fee_deposited"), ()),
-            (from.clone(), amount, new_balance),
+            (Symbol::new(&env, "premium_fee_deposited"), from.clone()),
+            (amount, new_balance, new_total),
         );
 
         Ok(())
@@ -349,8 +349,8 @@ impl TreasuryContract {
         env.storage().persistent().set(&TOTAL_FEES_COLLECTED, &new_total);
 
         env.events().publish(
-            (Symbol::new(&env, "claim_penalty_deposited"), ()),
-            (from.clone(), amount, new_balance),
+            (Symbol::new(&env, "claim_penalty_deposited"), from.clone()),
+            (amount, new_balance, new_total),
         );
 
         Ok(())
@@ -385,8 +385,8 @@ impl TreasuryContract {
         env.storage().persistent().set(&TOTAL_FEES_COLLECTED, &new_total);
 
         env.events().publish(
-            (Symbol::new(&env, "slashing_fee_deposited"), ()),
-            (from.clone(), amount, new_balance),
+            (Symbol::new(&env, "slashing_fee_deposited"), from.clone()),
+            (amount, new_balance, new_total),
         );
 
         Ok(())
@@ -422,8 +422,8 @@ impl TreasuryContract {
         env.storage().persistent().set(&TOTAL_FEES_COLLECTED, &new_total);
 
         env.events().publish(
-            (Symbol::new(&env, "fee_deposited"), ()),
-            (from.clone(), amount, fee_type, new_balance),
+            (Symbol::new(&env, "fee_deposited"), from.clone()),
+            (amount, fee_type, new_balance, new_total),
         );
 
         Ok(())
