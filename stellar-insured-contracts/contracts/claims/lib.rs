@@ -275,7 +275,6 @@ impl ClaimsContract {
 
     /// Get current oracle configuration
     pub fn get_oracle_config(env: Env) -> Result<OracleValidationConfig, ContractError> {
-        env.storage().persistent().get(&ORACLE_CFG).ok_or(ContractError::NotFound)
         env.storage()
             .persistent()
             .get(&ORACLE_CONFIG)
@@ -386,9 +385,6 @@ impl ClaimsContract {
         // I3: Initial state must be Submitted
         let initial_status = ClaimStatus::Submitted;
 
-        env.storage().persistent().set(
-            &(CLAIM, claim_id),
-            &(policy_id, claimant.clone(), amount, initial_status, current_time),
         // Store the claim
         env.storage()
             .persistent()
@@ -409,13 +405,6 @@ impl ClaimsContract {
         env.storage()
             .persistent()
             .set(&CLAIM_LIST, &claim_list);
-
-        env.events().publish(
-            (symbol_short!("clm_sub"), claim_id),
-            (policy_id, amount, claimant.clone()),
-        );
-
-        env.storage().persistent().set(&(POLICY_CLAIM, policy_id), &claim_id);
 
         env.events()
             .publish((symbol_short!("clm_sub"), claim_id), (policy_id, amount, claimant.clone()));
@@ -478,9 +467,6 @@ impl ClaimsContract {
         }
 
         // Check if oracle validation is required
-        if let Some(oracle_config) =
-            env.storage().persistent().get::<Symbol, OracleValidationConfig>(&ORACLE_CONFIG)
-        {
         if let Some(oracle_config) = env.storage().persistent().get::<_, OracleValidationConfig>(&ORACLE_CONFIG) {
             if oracle_config.require_oracle_validation {
                 if let Some(oracle_id) = oracle_data_id {
@@ -866,6 +852,79 @@ impl ClaimsContract {
             claims,
             total_count,
         }
+    }
+
+    /// Grant auditor role to an address (admin only)
+    pub fn grant_auditor_role(
+        env: Env,
+        admin: Address,
+        auditor: Address,
+    ) -> Result<(), ContractError> {
+        admin.require_auth();
+        require_admin(&env, &admin)?;
+
+        insurance_contracts::authorization::grant_role(
+            &env,
+            &admin,
+            &auditor,
+            Role::Auditor,
+        )?;
+
+        env.events()
+            .publish((symbol_short!("aud_grnt"), auditor.clone()), admin);
+
+        Ok(())
+    }
+
+    /// Revoke auditor role from an address (admin only)
+    pub fn revoke_auditor_role(
+        env: Env,
+        admin: Address,
+        auditor: Address,
+    ) -> Result<(), ContractError> {
+        admin.require_auth();
+        require_admin(&env, &admin)?;
+
+        insurance_contracts::authorization::revoke_role(&env, &admin, &auditor)?;
+
+        env.events()
+            .publish((symbol_short!("aud_rvk"), auditor.clone()), admin);
+
+        Ok(())
+    }
+
+    /// Allow role delegation by eligible users
+    pub fn delegate_role(
+        env: Env,
+        delegator: Address,
+        delegatee: Address,
+        role: Role,
+    ) -> Result<(), ContractError> {
+        delegator.require_auth();
+
+        insurance_contracts::authorization::delegate_role(&env, &delegator, &delegatee, role)?;
+
+        env.events()
+            .publish((symbol_short!("role_del"), delegatee.clone(), role.clone()), delegator);
+
+        Ok(())
+    }
+
+    /// Revoke a delegated role (admin only)
+    pub fn revoke_delegated_role(
+        env: Env,
+        admin: Address,
+        target: Address,
+    ) -> Result<(), ContractError> {
+        admin.require_auth();
+        require_admin(&env, &admin)?;
+
+        insurance_contracts::authorization::revoke_delegated_role(&env, &admin, &target)?;
+
+        env.events()
+            .publish((symbol_short!("del_rvk"), target.clone()), admin);
+
+        Ok(())
     }
 }
 

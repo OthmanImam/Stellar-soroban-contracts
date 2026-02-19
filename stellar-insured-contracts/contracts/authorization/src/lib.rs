@@ -28,6 +28,8 @@ pub enum Role {
     PolicyManager,
     /// Claim processor authorized to approve/reject claims
     ClaimProcessor,
+    /// Auditor authorized to view sensitive data and perform audits
+    Auditor,
     /// Regular user (policyholder, liquidity provider, etc.)
     User,
 }
@@ -89,6 +91,21 @@ impl Role {
     pub fn can_submit_claim(&self) -> bool {
         !matches!(self, Role::ClaimProcessor) // Claim processors cannot submit their own claims
     }
+
+    /// Check if this role can audit system operations
+    pub fn can_audit(&self) -> bool {
+        matches!(self, Role::Admin | Role::Auditor)
+    }
+
+    /// Check if this role has read-only access (for auditors and users)
+    pub fn can_read(&self) -> bool {
+        matches!(self, Role::Admin | Role::Auditor | Role::User)
+    }
+
+    /// Check if this role has elevated permissions (admin or governance roles)
+    pub fn has_elevated_permissions(&self) -> bool {
+        matches!(self, Role::Admin | Role::Governance)
+    }
 }
 
 /// Core authorization functions
@@ -115,7 +132,18 @@ pub fn grant_role(
     require_role(env, caller, Role::Admin)?;
 
     // Grant the role
+
+    env.storage()
+        .persistent()
+        .set(&RoleKey::UserRole(target.clone()), &role);
+    
+    // Emit event for role change logging
+    env.events()
+        .publish(("role_granted", target.clone(), role.clone()), caller.clone());
+    
+
     env.storage().persistent().set(&RoleKey::UserRole(target.clone()), &role);
+
 
     Ok(())
 }
@@ -131,6 +159,14 @@ pub fn revoke_role(env: &Env, caller: &Address, target: &Address) -> Result<(), 
     }
 
     // Revoke by setting to User role (lowest privilege)
+    env.storage()
+        .persistent()
+        .set(&RoleKey::UserRole(target.clone()), &Role::User);
+    
+    // Emit event for role change logging
+    env.events()
+        .publish(("role_revoked", target.clone()), caller.clone());
+    
     env.storage().persistent().set(&RoleKey::UserRole(target.clone()), &Role::User);
 
     Ok(())
@@ -179,6 +215,106 @@ pub fn require_any_role(env: &Env, address: &Address, roles: &[Role]) -> Result<
     } else {
         Err(AuthError::Unauthorized)
     }
+}
+
+/// Role delegation functions
+
+/// Delegate a role to another address (role-dependent permission)
+pub fn delegate_role(env: &Env, caller: &Address, target: &Address, role: Role) -> Result<(), AuthError> {
+    caller.require_auth();
+    
+    // Check if caller has permission to delegate this specific role
+    match role {
+        Role::Admin => require_admin(env, caller), // Only admin can delegate admin role
+        Role::PolicyManager => {
+            // Admin or PolicyManager can delegate PolicyManager role
+            if !matches!(get_role(env, caller), Role::Admin | Role::PolicyManager) {
+                return Err(AuthError::Unauthorized);
+            }
+            Ok(())
+        },
+        Role::ClaimProcessor => {
+            // Admin or Governance can delegate ClaimProcessor role
+            if !matches!(get_role(env, caller), Role::Admin | Role::Governance) {
+                return Err(AuthError::Unauthorized);
+            }
+            Ok(())
+        },
+        Role::RiskPoolManager => {
+            // Admin or Governance can delegate RiskPoolManager role
+            if !matches!(get_role(env, caller), Role::Admin | Role::Governance) {
+                return Err(AuthError::Unauthorized);
+            }
+            Ok(())
+        },
+        Role::Auditor => {
+            // Admin or Governance can delegate Auditor role
+            if !matches!(get_role(env, caller), Role::Admin | Role::Governance) {
+                return Err(AuthError::Unauthorized);
+            }
+            Ok(())
+        },
+        Role::Governance => {
+            // Only admin can delegate governance role
+            require_admin(env, caller)
+        },
+        Role::User => {
+            // Any user can delegate User role (though not very meaningful)
+            Ok(())
+        },
+    }?;
+    
+    // Grant the role to the target
+    env.storage()
+        .persistent()
+        .set(&RoleKey::UserRole(target.clone()), &role);
+    
+    // Emit event for role delegation logging
+    env.events()
+        .publish(("role_delegated", target.clone(), role.clone()), caller.clone());
+    
+    Ok(())
+}
+
+/// Check if an address can delegate a specific role
+pub fn can_delegate_role(env: &Env, address: &Address, role: Role) -> bool {
+    match role {
+        Role::Admin => matches!(get_role(env, address), Role::Admin),
+        Role::PolicyManager => matches!(get_role(env, address), Role::Admin | Role::PolicyManager),
+        Role::ClaimProcessor => matches!(get_role(env, address), Role::Admin | Role::Governance),
+        Role::RiskPoolManager => matches!(get_role(env, address), Role::Admin | Role::Governance),
+        Role::Auditor => matches!(get_role(env, address), Role::Admin | Role::Governance),
+        Role::Governance => matches!(get_role(env, address), Role::Admin),
+        Role::User => true, // Anyone can delegate User role
+    }
+}
+
+/// Revoke a delegated role (admin or the original delegator can revoke)
+pub fn revoke_delegated_role(env: &Env, caller: &Address, target: &Address) -> Result<(), AuthError> {
+    caller.require_auth();
+    
+    // Only admin can revoke a role in this implementation
+    if !matches!(get_role(env, caller), Role::Admin) {
+        return Err(AuthError::Unauthorized);
+    }
+    
+    // Revert to User role (lowest privilege)
+    env.storage()
+        .persistent()
+        .set(&RoleKey::UserRole(target.clone()), &Role::User);
+    
+    // Emit event for role revocation logging
+    env.events()
+        .publish(("role_delegation_revoked", target.clone()), caller.clone());
+    
+    Ok(())
+}
+
+/// Get all roles assigned to an address (for audit purposes)
+pub fn get_all_roles(env: &Env) -> Vec<(Address, Role)> {
+    // This is a simplified implementation since Soroban storage doesn't support iteration
+    // In a real implementation, we'd need to maintain a separate mapping for this
+    Vec::new()
 }
 
 /// Permission-based authorization (more granular than role-based)

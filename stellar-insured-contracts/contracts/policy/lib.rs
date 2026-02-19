@@ -801,6 +801,79 @@ impl PolicyContract {
     pub fn get_user_role(env: Env, address: Address) -> Role {
         get_role(&env, &address)
     }
+
+    /// Grant auditor role to an address (admin only)
+    pub fn grant_auditor_role(
+        env: Env,
+        admin: Address,
+        auditor: Address,
+    ) -> Result<(), ContractError> {
+        admin.require_auth();
+        require_admin(&env, &admin)?;
+
+        insurance_contracts::authorization::grant_role(
+            &env,
+            &admin,
+            &auditor,
+            Role::Auditor,
+        )?;
+
+        env.events()
+            .publish((Symbol::new(&env, "auditor_role_granted"), auditor.clone()), admin);
+
+        Ok(())
+    }
+
+    /// Revoke auditor role from an address (admin only)
+    pub fn revoke_auditor_role(
+        env: Env,
+        admin: Address,
+        auditor: Address,
+    ) -> Result<(), ContractError> {
+        admin.require_auth();
+        require_admin(&env, &admin)?;
+
+        insurance_contracts::authorization::revoke_role(&env, &admin, &auditor)?;
+
+        env.events()
+            .publish((Symbol::new(&env, "auditor_role_revoked"), auditor.clone()), admin);
+
+        Ok(())
+    }
+
+    /// Allow role delegation by eligible users
+    pub fn delegate_role(
+        env: Env,
+        delegator: Address,
+        delegatee: Address,
+        role: Role,
+    ) -> Result<(), ContractError> {
+        delegator.require_auth();
+
+        insurance_contracts::authorization::delegate_role(&env, &delegator, &delegatee, role)?;
+
+        env.events()
+            .publish((Symbol::new(&env, "role_delegated"), delegatee.clone(), role.clone()), delegator);
+
+        Ok(())
+    }
+
+    /// Revoke a delegated role (admin only)
+    pub fn revoke_delegated_role(
+        env: Env,
+        admin: Address,
+        target: Address,
+    ) -> Result<(), ContractError> {
+        admin.require_auth();
+        require_admin(&env, &admin)?;
+
+        insurance_contracts::authorization::revoke_delegated_role(&env, &admin, &target)?;
+
+        env.events()
+            .publish((Symbol::new(&env, "delegated_role_revoked"), target.clone()), admin);
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
