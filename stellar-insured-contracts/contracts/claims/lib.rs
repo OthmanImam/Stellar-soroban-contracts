@@ -298,6 +298,11 @@ impl ClaimsContract {
         admin.require_auth();
         require_admin(&env, &admin)?;
 
+        // Validate min_oracle_submissions is in 1–100 range
+        if min_oracle_submissions == 0 || min_oracle_submissions > 100 {
+            return Err(ContractError::InvalidInput);
+        }
+
         validate_address(&env, &oracle_contract)?;
 
         // Register oracle contract as trusted for cross-contract calls
@@ -420,9 +425,12 @@ impl ClaimsContract {
             return Err(ContractError::AlreadyExists);
         }
 
-        // 5. COVERAGE CHECK (Enforce claim ≤ coverage)
-        if amount <= 0 || amount > policy.1 {
-            return Err(ContractError::InvalidInput);
+        // 5. COVERAGE CHECK — validate amount is positive and does not exceed coverage
+        if amount <= 0 {
+            return Err(ContractError::InvalidAmount);
+        }
+        if amount > policy.1 {
+            return Err(ContractError::CoverageExceeded);
         }
 
         // ID Generation
