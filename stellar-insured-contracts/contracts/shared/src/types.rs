@@ -3,7 +3,7 @@
 //! This module defines shared enums and structs that represent core concepts
 //! used across all insurance contracts (policies, claims, governance, etc.).
 
-use soroban_sdk::{contracttype, Address, BytesN};
+use soroban_sdk::{contracttype, Address, BytesN, Symbol, Vec};
 
 // ===== Status Enums =====
 
@@ -309,6 +309,220 @@ pub struct TreasuryAllocation {
     pub executed: bool,
 }
 
+// ===== Product Template Types =====
+
+/// Insurance product categories
+#[contracttype]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProductCategory {
+    /// Property insurance (homes, buildings, etc.)
+    Property = 0,
+    /// Health insurance
+    Health = 1,
+    /// Auto insurance
+    Auto = 2,
+    /// Life insurance
+    Life = 3,
+    /// Travel insurance
+    Travel = 4,
+    /// Cyber insurance
+    Cyber = 5,
+    /// Business insurance
+    Business = 6,
+    /// Custom/Other insurance
+    Custom = 7,
+}
+
+/// Template status lifecycle
+#[contracttype]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TemplateStatus {
+    /// Template is being drafted
+    Draft = 0,
+    /// Template submitted for review
+    PendingReview = 1,
+    /// Template approved and ready for use
+    Approved = 2,
+    /// Template is active and can be used to create policies
+    Active = 3,
+    /// Template is deprecated but existing policies remain valid
+    Deprecated = 4,
+    /// Template is archived and cannot be used
+    Archived = 5,
+}
+
+/// Risk level classification
+#[contracttype]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RiskLevel {
+    /// Low risk - minimal likelihood of claims
+    Low = 0,
+    /// Medium risk - moderate likelihood of claims
+    Medium = 1,
+    /// High risk - significant likelihood of claims
+    High = 2,
+    /// Very high risk - maximum likelihood of claims
+    VeryHigh = 3,
+}
+
+/// Premium calculation model
+#[contracttype]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PremiumModel {
+    /// Fixed premium amount
+    Fixed = 0,
+    /// Percentage of coverage amount
+    Percentage = 1,
+    /// Risk-based calculation
+    RiskBased = 2,
+    /// Tiered pricing based on coverage tiers
+    Tiered = 3,
+}
+
+/// Coverage type specification
+#[contracttype]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CoverageType {
+    /// Full coverage for specified risks
+    Full = 0,
+    /// Partial coverage with specified limits
+    Partial = 1,
+    /// Excess coverage above deductible
+    Excess = 2,
+}
+
+/// Customization parameter types
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CustomParam {
+    /// Integer parameter (e.g., coverage limit, duration)
+    Integer((Symbol, i128, i128, i128)),
+    /// Decimal parameter (e.g., premium rate, deductible percentage)
+    Decimal((Symbol, i128, i128, i128)),
+    /// Boolean parameter (e.g., additional coverage options)
+    Boolean((Symbol, bool)),
+    /// Choice parameter from predefined options
+    Choice((Symbol, Vec<Symbol>, u32)),
+}
+
+/// Product template definition
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProductTemplate {
+    /// Unique template identifier
+    pub id: u64,
+    /// Template name
+    pub name: Symbol,
+    /// Template description
+    pub description: Symbol,
+    /// Product category
+    pub category: ProductCategory,
+    /// Current template status
+    pub status: TemplateStatus,
+    /// Risk level classification
+    pub risk_level: RiskLevel,
+    /// Premium calculation model
+    pub premium_model: PremiumModel,
+    /// Coverage type
+    pub coverage_type: CoverageType,
+    /// Minimum coverage amount allowed
+    pub min_coverage: i128,
+    /// Maximum coverage amount allowed
+    pub max_coverage: i128,
+    /// Minimum policy duration in days
+    pub min_duration_days: u32,
+    /// Maximum policy duration in days
+    pub max_duration_days: u32,
+    /// Base premium rate (basis points, 0-10000)
+    pub base_premium_rate_bps: u32,
+    /// Minimum deductible amount
+    pub min_deductible: i128,
+    /// Maximum deductible amount
+    pub max_deductible: i128,
+    /// Required collateral ratio (basis points, 0-10000)
+    pub collateral_ratio_bps: u32,
+    /// Customizable parameters
+    pub custom_params: Vec<CustomParam>,
+    /// Creator/administrator address
+    pub creator: Address,
+    /// Timestamp when template was created
+    pub created_at: u64,
+    /// Timestamp of last update
+    pub updated_at: u64,
+    /// Version number for template updates
+    pub version: u32,
+}
+
+/// Custom parameter values for a specific policy instance
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CustomParamValue {
+    /// Parameter name
+    pub name: Symbol,
+    /// Parameter value
+    pub value: CustomParamValueData,
+}
+
+/// Custom parameter value data
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CustomParamValueData {
+    /// Integer value
+    Integer(i128),
+    /// Decimal value
+    Decimal(i128),
+    /// Boolean value
+    Boolean(bool),
+    /// Choice index
+    Choice(u32),
+}
+
+/// Policy instance created from a template
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TemplatePolicy {
+    /// Policy identifier
+    pub policy_id: u64,
+    /// Template ID this policy was created from
+    pub template_id: u64,
+    /// Policy holder address
+    pub holder: Address,
+    /// Selected coverage amount
+    pub coverage_amount: i128,
+    /// Calculated premium amount
+    pub premium_amount: i128,
+    /// Policy duration in days
+    pub duration_days: u32,
+    /// Selected deductible amount
+    pub deductible: i128,
+    /// Custom parameter values
+    pub custom_values: Vec<CustomParamValue>,
+    /// Timestamp when policy was created
+    pub created_at: u64,
+    /// Timestamp when policy starts
+    pub start_time: u64,
+    /// Timestamp when policy expires
+    pub end_time: u64,
+}
+
+/// Template validation rules
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TemplateValidationRules {
+    /// Minimum required collateral ratio (basis points)
+    pub min_collateral_ratio_bps: u32,
+    /// Maximum allowed premium rate (basis points)
+    pub max_premium_rate_bps: u32,
+    /// Minimum policy duration
+    pub min_duration_days: u32,
+    /// Maximum policy duration
+    pub max_duration_days: u32,
+    /// Required governance approval threshold for new templates
+    pub approval_threshold_bps: u32,
+    /// Minimum time between template updates (seconds)
+    pub min_update_interval: u64,
+}
+
 // ===== Common Enums for Storage Keys =====
 
 /// Data key enumeration for contract storage
@@ -358,4 +572,16 @@ pub enum DataKey {
 
     /// Authorization role
     AuthRole,
+    /// Product template by ID
+    ProductTemplate,
+    /// Template counter
+    TemplateCounter,
+    /// Template policy by ID
+    TemplatePolicy,
+    /// Template policy counter
+    TemplatePolicyCounter,
+    /// Template validation rules
+    TemplateValidationRules,
+    /// Template status history
+    TemplateStatusHistory,
 }
