@@ -85,6 +85,12 @@ pub struct PolicyView {
     pub created_at: u64,
     /// Whether the policy is set to auto-renew
     pub auto_renew: bool,
+    /// Asset used for coverage amount
+    pub coverage_asset: shared::types::Asset,
+    /// Asset used for premium payments
+    pub premium_asset: shared::types::Asset,
+    /// Whether multi-asset claims are allowed
+    pub allow_multi_asset_claims: bool,
 }
 
 /// Result of a paginated policies query.
@@ -143,6 +149,12 @@ pub struct Policy {
     state: PolicyState, // Private - controlled through methods
     pub created_at: u64,
     pub auto_renew: bool,
+    /// Asset used for coverage amount
+    pub coverage_asset: shared::types::Asset,
+    /// Asset used for premium payments
+    pub premium_asset: shared::types::Asset,
+    /// Whether multi-asset claims are allowed for this policy
+    pub allow_multi_asset_claims: bool,
 }
 
 // Step 4: Implement Policy Methods
@@ -156,6 +168,9 @@ impl Policy {
         end_time: u64,
         created_at: u64,
         auto_renew: bool,
+        coverage_asset: shared::types::Asset,
+        premium_asset: shared::types::Asset,
+        allow_multi_asset_claims: bool,
     ) -> Self {
         Policy {
             holder,
@@ -166,6 +181,9 @@ impl Policy {
             state: PolicyState::ACTIVE,
             created_at,
             auto_renew,
+            coverage_asset,
+            premium_asset,
+            allow_multi_asset_claims,
         }
     }
 
@@ -501,6 +519,9 @@ impl PolicyContract {
         premium_amount: i128,
         duration_days: u32,
         auto_renew: bool,
+        coverage_asset: Option<shared::types::Asset>,
+        premium_asset: Option<shared::types::Asset>,
+        allow_multi_asset_claims: Option<bool>,
     ) -> Result<u64, ContractError> {
         // Use performance monitoring for optimization tracking
         PerformanceMonitor::track_operation(&env, "issue_policy", || {
@@ -559,12 +580,49 @@ impl PolicyContract {
         let policy_id = OptimizedPolicyContract::issue_policy_optimized(
             &env,
             manager.clone(),
+        // Use default assets if not specified (Native XLM)
+        let cov_asset = coverage_asset.unwrap_or(shared::types::Asset::Native);
+        let prem_asset = premium_asset.unwrap_or(shared::types::Asset::Native);
+        let multi_asset = allow_multi_asset_claims.unwrap_or(false);
+
+        let policy_id = next_policy_id(&env);
+        let current_time = env.ledger().timestamp();
+        let end_time = current_time
+            .checked_add(
+                u64::from(duration_days).checked_mul(86400).ok_or(ContractError::Overflow2)?,
+            )
+            .ok_or(ContractError::Overflow2)?;
+
+        // Use the new Policy constructor which initializes state to Active
+        let policy = Policy::new(
             holder.clone(),
             coverage_amount,
             premium_amount,
             duration_days,
             auto_renew,
         )?;
+            cov_asset,
+            prem_asset,
+            multi_asset,
+        );
+
+        env.storage().persistent().set(&DataKey::Policy(policy_id), &policy);
+
+        // Add policy ID to the active policy list for efficient querying
+        let mut active_list: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&ACTIVE_POLICY_LIST)
+            .unwrap_or_else(|| Vec::new(&env));
+        active_list.push_back(policy_id);
+        env.storage()
+            .persistent()
+            .set(&ACTIVE_POLICY_LIST, &active_list);
+
+        env.events().publish(
+            (Symbol::new(&env, "PolicyIssued"), policy_id),
+            (holder, coverage_amount, premium_amount, duration_days, manager, current_time),
+        );
 
         Ok(policy_id)
     }
@@ -1023,6 +1081,9 @@ mod tests {
                 premium,
                 duration,
                 false,
+                None, // coverage_asset - defaults to Native
+                None, // premium_asset - defaults to Native
+                None, // allow_multi_asset_claims - defaults to false
             )
             .unwrap();
 
@@ -1032,6 +1093,10 @@ mod tests {
             assert_eq!(policy.coverage_amount, coverage);
             assert_eq!(policy.premium_amount, premium);
             assert_eq!(policy.state(), PolicyState::ACTIVE);
+            // Verify default asset values
+            assert!(matches!(policy.coverage_asset, shared::types::Asset::Native));
+            assert!(matches!(policy.premium_asset, shared::types::Asset::Native));
+            assert_eq!(policy.allow_multi_asset_claims, false);
         });
     }
 
@@ -1056,6 +1121,9 @@ mod tests {
                 MIN_PREMIUM_AMOUNT + 100,
                 30,
                 false,
+                None,
+                None,
+                None,
             );
 
             assert_eq!(result, Err(ContractError::InvalidAmount));
@@ -1083,6 +1151,9 @@ mod tests {
                 MIN_PREMIUM_AMOUNT + 100,
                 30,
                 false,
+                None,
+                None,
+                None,
             );
 
             assert_eq!(result, Err(ContractError::InvalidAmount));
@@ -1110,6 +1181,9 @@ mod tests {
                 MIN_PREMIUM_AMOUNT - 1,
                 30,
                 false,
+                None,
+                None,
+                None,
             );
 
             assert_eq!(result, Err(ContractError::InvalidPremium));
@@ -1137,6 +1211,9 @@ mod tests {
                 MAX_PREMIUM_AMOUNT + 1,
                 30,
                 false,
+                None,
+                None,
+                None,
             );
 
             assert_eq!(result, Err(ContractError::InvalidPremium));
@@ -1164,6 +1241,9 @@ mod tests {
                 MIN_PREMIUM_AMOUNT + 100,
                 MIN_POLICY_DURATION_DAYS - 1,
                 false,
+                None,
+                None,
+                None,
             );
 
             assert_eq!(result, Err(ContractError::InvalidInput));
@@ -1191,6 +1271,9 @@ mod tests {
                 MIN_PREMIUM_AMOUNT + 100,
                 MAX_POLICY_DURATION_DAYS + 1,
                 false,
+                None,
+                None,
+                None,
             );
 
             assert_eq!(result, Err(ContractError::InvalidInput));
@@ -1224,6 +1307,9 @@ mod tests {
                 premium,
                 duration,
                 false,
+                None,
+                None,
+                None,
             )
             .unwrap();
 
@@ -1235,6 +1321,9 @@ mod tests {
                 premium,
                 duration,
                 false,
+                None,
+                None,
+                None,
             )
             .unwrap();
 
@@ -1269,6 +1358,9 @@ mod tests {
                 premium,
                 duration,
                 false,
+                None,
+                None,
+                None,
             )
             .unwrap();
 
@@ -1312,6 +1404,9 @@ mod tests {
                 premium,
                 duration,
                 false,
+                None,
+                None,
+                None,
             )
             .unwrap();
 
@@ -1355,6 +1450,9 @@ mod tests {
                 premium,
                 duration,
                 false,
+                None,
+                None,
+                None,
             )
             .unwrap();
 
@@ -1392,6 +1490,9 @@ mod tests {
                 premium,
                 duration,
                 true, // Auto renew enabled
+                None,
+                None,
+                None,
             )
             .unwrap();
 
