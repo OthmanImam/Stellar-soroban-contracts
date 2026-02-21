@@ -43,6 +43,8 @@ pub use types::{
     RiskPoolStatus, ClaimEvidence, VoteRecord, OracleConfig, RiskMetrics,
     PolicyMetadata, ClaimMetadata, TreasuryAllocation, DataKey,
     CrossChainMessageStatus, CrossChainMessageType, BridgeStatus,
+    // Governance staking types
+    RewardConfig, StakeInfo, StakingPosition, StakingStats, VoteDelegation,
 };
 
 // Re-export all validation helpers (grouped by domain)

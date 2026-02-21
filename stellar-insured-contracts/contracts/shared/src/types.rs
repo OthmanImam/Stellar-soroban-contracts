@@ -766,4 +766,108 @@ pub enum DataKey {
     PolicyAssetConfig,
     /// Asset balance by (owner, asset)
     AssetBalance,
+    /// Governance staking information
+    GovernanceStake,
+    /// Governance reward configuration
+    GovernanceRewardConfig,
+    /// Governance staking statistics
+    GovernanceStakingStats,
+}
+
+// ===== Governance Staking Types =====
+
+/// Staking information for a governance participant
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StakeInfo {
+    /// Staker address
+    pub staker: Address,
+    /// Amount of governance tokens staked
+    pub amount: i128,
+    /// Timestamp when stake was created
+    pub staked_at: u64,
+    /// Timestamp of last reward calculation
+    pub last_claim_at: u64,
+    /// Accumulated rewards not yet claimed
+    pub pending_rewards: i128,
+    /// Whether the stake is currently locked
+    pub is_locked: bool,
+    /// Unlock timestamp (if unstaking)
+    pub unlock_at: Option<u64>,
+    /// Voting power multiplier (based on stake duration)
+    pub voting_power_multiplier: u32,
+}
+
+/// Reward distribution configuration
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RewardConfig {
+    /// Reward token contract address
+    pub reward_token: Address,
+    /// Base reward rate per staked token per second (in basis points)
+    pub base_reward_rate_bps: u32,
+    /// Bonus rate for long-term stakers (additional bps per year locked)
+    pub loyalty_bonus_bps: u32,
+    /// Minimum staking period for rewards (seconds)
+    pub min_stake_period: u64,
+    /// Unstaking cooldown period (seconds)
+    pub unstake_cooldown: u64,
+    /// Whether rewards are currently enabled
+    pub rewards_enabled: bool,
+    /// Total reward pool allocated
+    pub total_reward_pool: i128,
+    /// Remaining rewards in pool
+    pub remaining_rewards: i128,
+    /// Last update timestamp
+    pub last_update: u64,
+}
+
+/// Governance staking statistics
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StakingStats {
+    /// Total number of active stakers
+    pub total_stakers: u32,
+    /// Total amount staked
+    pub total_staked: i128,
+    /// Total rewards distributed
+    pub total_rewards_distributed: i128,
+    /// Average stake duration (seconds)
+    pub avg_stake_duration: u64,
+    /// Timestamp of last update
+    pub last_update: u64,
+}
+
+/// Staking position for a user
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StakingPosition {
+    /// User address
+    pub user: Address,
+    /// Staked amount
+    pub staked_amount: i128,
+    /// Reward debt for accurate reward calculation
+    pub reward_debt: i128,
+    /// When staking started
+    pub stake_start_time: u64,
+    /// Lock period end (0 if no lock)
+    pub lock_end_time: u64,
+    /// Accumulated pending rewards
+    pub pending_rewards: i128,
+}
+
+/// Vote delegation information
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VoteDelegation {
+    /// Delegator address
+    pub delegator: Address,
+    /// Delegatee address (who receives voting power)
+    pub delegatee: Address,
+    /// Amount of voting power delegated
+    pub amount: i128,
+    /// When delegation was created
+    pub delegated_at: u64,
+    /// Whether delegation is active
+    pub is_active: bool,
 }

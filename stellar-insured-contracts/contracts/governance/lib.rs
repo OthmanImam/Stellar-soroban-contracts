@@ -18,8 +18,8 @@ const PROPOSAL: Symbol = Symbol::short("PROPOSAL");
 const PROPOSAL_COUNTER: Symbol = Symbol::short("PROP_CNT");
 const VOTER: Symbol = Symbol::short("VOTER");
 const PROPOSAL_LIST: Symbol = Symbol::short("PROP_LIST");
-const SLASHING_CONTRACT: Symbol = Symbol::short("SLASHING");
 const SLASHING_CONTRACT: Symbol = Symbol::short("SLASH_C");
+const STAKING_CONTRACT: Symbol = Symbol::short("STAKING");
 const GOVERNANCE_VOTE_SCOPE: &str = "governance_vote";
 const DEFAULT_GOVERNANCE_VOTE_RATE_LIMIT_MAX_CALLS: u32 = 10;
 const DEFAULT_GOVERNANCE_VOTE_RATE_LIMIT_WINDOW_SECS: u64 = 60;
@@ -192,6 +192,7 @@ impl GovernanceContract {
         min_voting_percentage: u32,
         min_quorum_percentage: u32,
         slashing_contract: Address,
+        staking_contract: Option<Address>,
     ) -> Result<(), ContractError> {
         // Check if already initialized
         if insurance_contracts::authorization::get_admin(&env).is_some() {
@@ -226,6 +227,12 @@ impl GovernanceContract {
             &(token_contract, voting_period_days, min_voting_percentage, min_quorum_percentage),
         );
         env.storage().persistent().set(&SLASHING_CONTRACT, &slashing_contract);
+        
+        // Store staking contract if provided
+        if let Some(staking) = staking_contract {
+            env.storage().persistent().set(&STAKING_CONTRACT, &staking);
+        }
+        
         env.storage().persistent().set(&PROPOSAL_COUNTER, &0u64);
 
         env.events().publish((Symbol::new(&env, "initialized"), ()), admin);
@@ -542,6 +549,24 @@ impl GovernanceContract {
         Ok(())
     }
 
+    pub fn set_staking_contract(
+        env: Env,
+        admin: Address,
+        staking_contract: Address,
+    ) -> Result<(), ContractError> {
+        admin.require_auth();
+        require_admin(&env, &admin)?;
+
+        env.storage().persistent().set(&STAKING_CONTRACT, &staking_contract);
+
+        env.events().publish(
+            (Symbol::new(&env, "staking_contract_set"), ()),
+            staking_contract,
+        );
+
+        Ok(())
+    }
+
     pub fn update_auth_threshold(
         env: Env,
         admin: Address,
@@ -565,6 +590,19 @@ impl GovernanceContract {
         insurance_contracts::authorization::set_threshold(&env, &admin, role, new_threshold)?;
 
         Ok(())
+    }
+
+    /// Get voting power for an address (from staking contract if available)
+    pub fn get_voting_power(env: Env, voter: Address) -> i128 {
+        // Try to get voting power from staking contract
+        if let Some(staking_contract) = env.storage().persistent().get(&STAKING_CONTRACT) {
+            // Call staking contract to get voting power
+            let staking_client = GovernanceStakingClient::new(&env, &staking_contract);
+            return staking_client.get_voting_power(&voter);
+        }
+        
+        // Fallback: return 0 if no staking contract
+        0
     }
 
     pub fn pause(env: Env, admin: Address) -> Result<(), ContractError> {
@@ -998,6 +1036,12 @@ impl GovernanceContract {
     pub fn get_user_role(env: Env, address: Address) -> Role {
         get_role(&env, &address)
     }
+}
+
+// Client interface for staking contract
+#[contractclient(name = "GovernanceStakingClient")]
+pub trait GovernanceStakingInterface {
+    fn get_voting_power(env: Env, user: Address) -> i128;
 }
 
 #[cfg(test)]

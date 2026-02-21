@@ -17,6 +17,7 @@ members = [
     "contracts/cross_chain",
     "contracts/risk-monitoring",
     "contracts/asset_registry",
+    "contracts/governance_staking",
 ]
 
 [workspace.dependencies]
