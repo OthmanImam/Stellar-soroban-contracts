@@ -39,6 +39,13 @@ pub mod gas_optimization {
     };
 }
 
+/// Re-export compliance reporting module
+pub mod compliance_reporting {
+    pub use compliance_reporting::{
+        ComplianceReport, ReportStatus, Certification, AuditEntry
+    };
+}
+
 /// Common contract types shared across all insurance contracts
 pub mod types {
     use super::*;
