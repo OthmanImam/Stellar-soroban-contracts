@@ -1,3 +1,25 @@
+use soroban_sdk::{Vec as SorobanVec};
+use core::cmp::min;
+
+const PAUSE_TIMELOCK: Symbol = Symbol::short("PAUSE_TIMELOCK");
+const RESUME_VOTES: Symbol = Symbol::short("RESUME_VOTES");
+const REQUIRED_VOTES: Symbol = Symbol::short("REQUIRED_VOTES");
+
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct RecoveryProcedure {
+    pub steps: SorobanVec<Symbol>,
+    pub completed: bool,
+}
+
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct StagedResumption {
+    pub stages: SorobanVec<Symbol>,
+    pub current_stage: u32,
+    pub total_stages: u32,
+    pub started: bool,
+}
 #![no_std]
 
 use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, Symbol};
@@ -68,6 +90,10 @@ impl EmergencyPauseContract {
             return Err(EmergencyPauseError::InvalidDuration);
         }
 
+        // Set timelock for pause (e.g., 10s enforced delay)
+        let now = env.ledger().timestamp();
+        env.storage().persistent().set(&PAUSE_TIMELOCK, &(now + 10));
+
         let pause_state = EmergencyPauseState {
             is_paused: true,
             reason,
@@ -77,6 +103,18 @@ impl EmergencyPauseContract {
         };
 
         env.storage().persistent().set(&EMERGENCY_PAUSE, &pause_state);
+
+        // Initialize staged resumption and recovery
+        let stages = SorobanVec::from_array(&env, &[Symbol::short("Stage1"), Symbol::short("Stage2"), Symbol::short("Stage3")]);
+        let staged = StagedResumption { stages, current_stage: 0, total_stages: 3, started: false };
+        env.storage().persistent().set(&Symbol::short("STAGED_RESUME"), &staged);
+
+        let recovery = RecoveryProcedure { steps: SorobanVec::from_array(&env, &[Symbol::short("CheckFunds"), Symbol::short("NotifyUsers"), Symbol::short("Audit")]), completed: false };
+        env.storage().persistent().set(&Symbol::short("RECOVERY"), &recovery);
+
+        // Set required votes for emergency governance (e.g., 3)
+        env.storage().persistent().set(&REQUIRED_VOTES, &3u32);
+        env.storage().persistent().set(&RESUME_VOTES, &SorobanVec::<Address>::new(&env));
 
         Ok(())
     }
@@ -96,8 +134,63 @@ impl EmergencyPauseContract {
             return Err(EmergencyPauseError::NotPaused);
         }
 
+        // Enforce timelock before unpausing
+        let now = env.ledger().timestamp();
+        let timelock: u64 = env.storage().persistent().get(&PAUSE_TIMELOCK).unwrap_or(0);
+        if now < timelock {
+            return Err(EmergencyPauseError::DurationExceeded);
+        }
+
         env.storage().persistent().remove(&EMERGENCY_PAUSE);
 
+        // Reset staged resumption and recovery
+        env.storage().persistent().remove(&Symbol::short("STAGED_RESUME"));
+        env.storage().persistent().remove(&Symbol::short("RECOVERY"));
+        env.storage().persistent().remove(&RESUME_VOTES);
+
+        Ok(())
+    }
+
+    // Emergency governance voting for resumption
+    pub fn vote_resume(env: &Env, voter: &Address) -> Result<u32, EmergencyPauseError> {
+        voter.require_auth();
+        let mut votes: SorobanVec<Address> = env.storage().persistent().get(&RESUME_VOTES).unwrap_or(SorobanVec::new(&env));
+        if votes.contains(voter) {
+            return Ok(votes.len());
+        }
+        votes.push_back(voter.clone());
+        env.storage().persistent().set(&RESUME_VOTES, &votes);
+        let required: u32 = env.storage().persistent().get(&REQUIRED_VOTES).unwrap_or(3);
+        if votes.len() >= required {
+            // Allow admin to deactivate pause
+            // (actual unpause must still be called by admin)
+        }
+        Ok(votes.len())
+    }
+
+    // Advance staged resumption
+    pub fn advance_stage(env: &Env, admin: &Address) -> Result<u32, EmergencyPauseError> {
+        admin.require_auth();
+        let mut staged: StagedResumption = env.storage().persistent().get(&Symbol::short("STAGED_RESUME")).unwrap();
+        if staged.current_stage + 1 < staged.total_stages {
+            staged.current_stage += 1;
+            staged.started = true;
+            env.storage().persistent().set(&Symbol::short("STAGED_RESUME"), &staged);
+            Ok(staged.current_stage)
+        } else {
+            staged.current_stage = staged.total_stages;
+            staged.started = false;
+            env.storage().persistent().set(&Symbol::short("STAGED_RESUME"), &staged);
+            Ok(staged.current_stage)
+        }
+    }
+
+    // Complete recovery procedure
+    pub fn complete_recovery(env: &Env, admin: &Address) -> Result<(), EmergencyPauseError> {
+        admin.require_auth();
+        let mut recovery: RecoveryProcedure = env.storage().persistent().get(&Symbol::short("RECOVERY")).unwrap();
+        recovery.completed = true;
+        env.storage().persistent().set(&Symbol::short("RECOVERY"), &recovery);
         Ok(())
     }
 
