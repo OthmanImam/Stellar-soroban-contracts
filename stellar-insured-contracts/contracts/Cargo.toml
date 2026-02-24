@@ -21,3 +21,4 @@ analytics-storage = { path = "analytics_storage" }
 monitoring-dashboard = { path = "monitoring_dashboard" }
 alerting-system = { path = "alerting_system" }
 external-monitoring = { path = "external_monitoring" }
+compliance-reporting = { path = "compliance_reporting" }
