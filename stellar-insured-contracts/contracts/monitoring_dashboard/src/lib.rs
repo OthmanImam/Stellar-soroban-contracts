@@ -58,6 +58,23 @@ pub struct Dashboard {
     /// List of widgets
     pub widgets: Vec<Widget>,
     /// Time range for data display
+        /// Emit telemetry event for performance analytics
+        fn emit_telemetry_event(env: &Env, operation: &str, dashboard_id: Option<u64>, widget_id: Option<u64>, status: &str) {
+            let contract_id = env.current_contract_address();
+            let timestamp = env.ledger().timestamp();
+            let gas_used = env.ledger().transaction().unwrap_or_default().gas_used;
+            env.events().publish(
+                (symbol_short!("telemetry"), contract_id.clone()),
+                (
+                    operation,
+                    dashboard_id,
+                    widget_id,
+                    status,
+                    gas_used,
+                    timestamp,
+                ),
+            );
+        }
     pub default_time_range: u64,
     /// Auto-refresh interval (seconds)
     pub auto_refresh_interval: u64,
@@ -79,6 +96,7 @@ pub struct Dashboard {
 pub struct DashboardLayout {
     /// Layout type (grid, tabs, sections)
     pub layout_type: Symbol,
+            Self::emit_telemetry_event(&env, "create_dashboard", Some(dashboard_id), None, "success");
     /// Number of columns
     pub columns: u32,
     /// Number of rows
@@ -99,6 +117,7 @@ pub struct WidgetPosition {
     pub row: u32,
     /// Width in columns
     pub width: u32,
+            Self::emit_telemetry_event(&env, "add_widget", Some(dashboard_id), Some(widget_id), "success");
     /// Height in rows
     pub height: u32,
     /// Minimum width
