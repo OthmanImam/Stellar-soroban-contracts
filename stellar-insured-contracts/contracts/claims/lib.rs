@@ -47,6 +47,8 @@ use insurance_contracts::authorization::{
 use insurance_contracts::rate_limit::{self, RateLimitConfig};
 use insurance_contracts::emergency_pause::EmergencyPause;
 use insurance_contracts::types::ClaimStatus;
+use insurance_contracts::events::{EventCategory, EventSeverity, EventBuilder};
+// use insurance_contracts::audit_events::{AuditSubcategory, AuditSeverity as AuditSeverityLevel, audit_events};
 
 // Import invariants and safety assertions
 use insurance_invariants::{InvariantError, ProtocolInvariants};
@@ -506,6 +508,30 @@ impl ClaimsContract {
             .persistent()
             .set(&CLAIM_LIST, &claim_list);
 
+        // Emit structured events for analytics and monitoring
+        EventBuilder::new(
+            &env,
+            EventCategory::Claim,
+            "ClaimSubmitted",
+            EventSeverity::Info,
+            claimant.clone(),
+            env.current_contract_address(),
+        )
+        .subject_id(claim_id)
+        .data("claim_submitted")
+        .publish();
+
+        // Emit audit events for compliance
+        // audit_events::claim_submitted(
+        //     &env,
+        //     claimant.clone(),
+        //     env.current_contract_address(),
+        //     claim_id,
+        //     policy_id,
+        //     amount,
+        // );
+
+        // Keep legacy events for backward compatibility
         env.events()
             .publish((symbol_short!("clm_sub"), claim_id), (policy_id, amount, claimant.clone()));
 
@@ -612,6 +638,19 @@ impl ClaimsContract {
         claim.3 = ClaimStatus::Approved;
 
         env.storage().persistent().set(&(CLAIM, claim_id), &claim);
+
+        // Emit structured events for analytics and monitoring
+        EventBuilder::new(
+            &env,
+            EventCategory::Claim,
+            "ClaimApproved",
+            EventSeverity::Info,
+            processor.clone(),
+            env.current_contract_address(),
+        )
+        .subject_id(claim_id)
+        .data("claim_approved")
+        .publish();
 
         env.events().publish((symbol_short!("clm_app"), claim_id), (claim.1, claim.2));
 

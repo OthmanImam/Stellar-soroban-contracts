@@ -29,17 +29,20 @@
 //! use shared::constants::MIN_COVERAGE_AMOUNT;
 //! ```
 
-pub mod errors;
+// pub mod errors;
 pub mod types;
 pub mod constants;
-pub mod validation;
+// pub mod validation;
 pub mod versioning;
 pub mod upgradeable;
-pub mod gas_optimization;
-pub mod emergency_pause;
+// pub mod gas_optimization;
+// pub mod emergency_pause;
+pub mod events;
+// pub mod audit_events;
+// pub mod event_verification;
 
 // Re-export commonly used types
-pub use errors::ContractError;
+// pub use errors::ContractError;
 pub use types::{
     PolicyStatus, ClaimStatus, ProposalStatus, ProposalType, VoteType,
     RiskPoolStatus, ClaimEvidence, VoteRecord, OracleConfig, RiskMetrics,
@@ -56,101 +59,16 @@ pub use types::{
     MetadataProperty,
 };
 
-// Re-export all validation helpers (grouped by domain)
-pub use validation::{
-    // Address
-    validate_address,
-    validate_addresses,
-    validate_addresses_different,
-    validate_non_zero_address,
-
-    // Amount
-    validate_positive_amount,
-    validate_non_negative_amount,
-    validate_amount_in_bounds,
-    validate_coverage_amount,
-    validate_premium_amount,
-    validate_claim_amount,
-    validate_deposit_amount,
-    validate_withdrawal_amount,
-    validate_allocation_amount,
-    validate_sufficient_funds,
-
-    // Time / Duration
-    validate_future_timestamp,
-    validate_past_timestamp,
-    validate_time_range,
-    validate_duration_days,
-    validate_voting_duration,
-
-    // Percentage / Basis Points
-    validate_percentage,
-    validate_basis_points,
-    validate_oracle_deviation,
-    validate_quorum_percent,
-    validate_voting_threshold,
-    validate_reserve_ratio,
-
-    // Contract State
-    validate_not_paused,
-    validate_initialized,
-    validate_not_initialized,
-
-    // Evidence & String Sanitization
-    validate_evidence_hash,
-    validate_bytes_length,
-    validate_string_length,
-    validate_metadata,
-    validate_description,
-    validate_proposal_title,
-
-    // Governance Proposal
-    validate_proposal_params,
-
-    // Oracle
-    validate_oracle_submissions,
-    validate_oracle_data_age,
-    validate_min_oracle_submissions,
-
-    // Slashing
-    validate_slashing_amount,
-    validate_slashing_percent,
-
-    // Pagination
-    validate_pagination,
-
-    // Safe arithmetic
-    safe_add,
-    safe_sub,
-    safe_mul,
-    safe_div,
-
-    // Batch & Calculation helpers
-    validate_all,
-    calculate_percentage,
-    calculate_basis_points,
-    calculate_reserve_ratio,
-
-    // Domain-level composite validators
-    validate_policy_params,
-    validate_claim_params,
-    validate_risk_pool_init_params,
-};
-
-pub use gas_optimization::{
-    GasOptimizer,
-    OptimizedStructures,
-    PerformanceMonitor,
-    GasMeasurement,
-    GasMetrics,
-    StorageOptimization,
-    OptimizedDataKey,
-};
-
-pub use emergency_pause::{
-    EmergencyPause,
-    EmergencyPauseConfig,
-    EmergencyPauseEvent,
+pub use constants::{
+    // Contract limits
+    MAX_POLICY_DURATION_DAYS, MIN_COVERAGE_AMOUNT, MAX_COVERAGE_AMOUNT,
+    MIN_PREMIUM_AMOUNT, MAX_PREMIUM_AMOUNT,
+    // Time constants
+    ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    CLAIM_GRACE_PERIOD_SECONDS,
+    // Governance constants
+    DEFAULT_VOTING_PERIOD_SECONDS, PROPOSAL_EXPIRY_SECONDS,
+    DEFAULT_MIN_QUORUM_PERCENT,
 };
 
 pub use versioning::{
@@ -158,3 +76,12 @@ pub use versioning::{
     MigrationState, migration_state_to_u32, u32_to_migration_state,
 };
 pub use upgradeable::UpgradeableContract;
+pub use events::{
+    EventCategory, EventSeverity, StructuredEvent, EventBuilder,
+    events::{
+        policy_issued, claim_submitted, risk_pool_deposit,
+    },
+};
+// Include test modules
+#[cfg(test)]
+mod simple_test;

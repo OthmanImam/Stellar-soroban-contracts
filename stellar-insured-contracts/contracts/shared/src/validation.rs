@@ -11,7 +11,7 @@
 //! - Constants live in `constants.rs`; validators live here
 //! - No panics – every bad path returns a typed error
 
-use crate::errors::ContractError;
+// use crate::errors::ContractError;
 use soroban_sdk::{Address, Bytes, BytesN, Env, String};
 
 // ============================================================
