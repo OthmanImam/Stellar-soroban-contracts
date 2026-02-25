@@ -5,7 +5,7 @@ members = [
     "contracts",
     "contracts/authorization",
     "contracts/shared",
-    "contracts/error-handling",
+    "contracts/error_handling",
     "contracts/invariants",
     "contracts/policy",
     "contracts/claims",
@@ -28,8 +28,8 @@ members = [
 ]
 
 [workspace.dependencies]
-soroban-sdk = "25.0.0"
-soroban-sdk-macros = "25.0.0"
+soroban-sdk = "21.7.7"
+soroban-sdk-macros = "21.7.7"
 
 [profile.release]
 opt-level = "z"

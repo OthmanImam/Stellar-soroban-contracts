@@ -9,6 +9,8 @@ use insurance_contracts::authorization::{
 use insurance_contracts::rate_limit::{self, RateLimitConfig};
 use insurance_contracts::gas_optimization::{GasOptimizer, PerformanceMonitor};
 use insurance_contracts::emergency_pause::EmergencyPause;
+use insurance_contracts::events::{EventCategory, EventSeverity, EventBuilder};
+// use insurance_contracts::audit_events::{AuditSubcategory, AuditSeverity as AuditSeverityLevel, audit_events};
 
 // Import invariant checks and error types
 use insurance_invariants::{InvariantError, ProtocolInvariants};
@@ -653,10 +655,6 @@ impl PolicyContract {
         // Validate duration within bounds
         validate_duration(duration_days)?;
 
-        // Use optimized policy issuance for gas efficiency
-        let policy_id = OptimizedPolicyContract::issue_policy_optimized(
-            &env,
-            manager.clone(),
         // Use default assets if not specified (Native XLM)
         let cov_asset = coverage_asset.unwrap_or(shared::types::Asset::Native);
         let prem_asset = premium_asset.unwrap_or(shared::types::Asset::Native);
@@ -677,11 +675,10 @@ impl PolicyContract {
             premium_amount,
             duration_days,
             auto_renew,
-        )?;
             cov_asset,
             prem_asset,
             multi_asset,
-        );
+        )?;
 
         env.storage().persistent().set(&DataKey::Policy(policy_id), &policy);
 
@@ -696,6 +693,31 @@ impl PolicyContract {
             .persistent()
             .set(&ACTIVE_POLICY_LIST, &active_list);
 
+        // Emit structured events for analytics and monitoring
+        EventBuilder::new(
+            &env,
+            EventCategory::Policy,
+            "PolicyIssued",
+            EventSeverity::Info,
+            manager.clone(),
+            env.current_contract_address(),
+        )
+        .subject_id(policy_id)
+        .data("policy_issued")
+        .publish();
+
+        // Emit audit events for compliance
+        // audit_events::policy_issued(
+        //     &env,
+        //     manager.clone(),
+        //     env.current_contract_address(),
+        //     policy_id,
+        //     holder.clone(),
+        //     coverage_amount,
+        //     premium_amount,
+        // );
+
+        // Keep legacy events for backward compatibility
         env.events().publish(
             (Symbol::new(&env, "PolicyIssued"), policy_id),
             (holder, coverage_amount, premium_amount, duration_days, manager, current_time),

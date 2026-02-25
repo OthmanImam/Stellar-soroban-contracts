@@ -13,6 +13,8 @@ use insurance_invariants::{InvariantError, ProtocolInvariants};
 
 // Import gas optimization utilities
 use insurance_contracts::gas_optimization::{GasOptimizer, PerformanceMonitor};
+use insurance_contracts::events::{EventCategory, EventSeverity, EventBuilder};
+// use insurance_contracts::audit_events::{AuditSubcategory, AuditSeverity as AuditSeverityLevel, audit_events};
 
 // Import optimized risk pool implementation
 use crate::optimized_risk_pool::OptimizedRiskPool;
@@ -303,9 +305,34 @@ impl RiskPoolContract {
         // I1: Assert liquidity invariant holds after deposit
         check_liquidity_invariant(&env)?;
 
+        let new_balance = current_stake + amount;
+
+        // Emit structured events for analytics and monitoring
+        EventBuilder::new(
+            &env,
+            EventCategory::RiskPool,
+            "RiskPoolDeposit",
+            EventSeverity::Info,
+            provider.clone(),
+            env.current_contract_address(),
+        )
+        .data("liquidity_deposited")
+        .publish();
+
+        // Emit audit events for compliance
+        // audit_events::risk_pool_deposit(
+        //     &env,
+        //     provider.clone(),
+        //     env.current_contract_address(),
+        //     provider.clone(),
+        //     amount,
+        //     new_balance,
+        // );
+
+        // Keep legacy events for backward compatibility
         env.events().publish(
             (Symbol::new(&env, "liquidity_deposited"), provider.clone()),
-            (amount, current_stake + amount),
+            (amount, new_balance),
         );
 
         Ok(())
@@ -372,6 +399,19 @@ impl RiskPoolContract {
 
         env.storage().persistent().set(&RESERVED_TOTAL, &new_reserved_total);
         env.storage().persistent().set(&(CLAIM_RESERVATION, claim_id), &amount);
+
+        // Emit structured events for analytics and monitoring
+        EventBuilder::new(
+            &env,
+            EventCategory::RiskPool,
+            "LiquidityReserved",
+            EventSeverity::Info,
+            caller_contract.clone(),
+            env.current_contract_address(),
+        )
+        .subject_id(claim_id)
+        .data("liquidity_reserved")
+        .publish();
 
         // I1: Assert liquidity invariant holds after reservation
         check_liquidity_invariant(&env)?;
